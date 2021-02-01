@@ -256,8 +256,7 @@ function dmapreduce(dInfos::Vector{Dinfo}, map, fold)
     end
 
     if any([dInfos[1].workers] .!= [di.workers for di in dInfos])
-        @error "workers in Dinfo objects do not match" dInfos[1].workers
-        error("data distribution mismatch")
+        throw(DomainError(dInfos, "workers mismatch"))
     end
 
     return dmapreduce([di.val for di in dInfos], map, fold, dInfos[1].workers)

@@ -45,9 +45,9 @@
 
         #TODO test actual sizes of the distributed pieces
 
-        @test gather_array(di, free = false) == d #TODO test with true
+        @test gather_array(di) == d
         @test sum([sizeof(get_val_from(w, :test)) for w in W]) > 0
-        unscatter(di)
+        @test gather_array(di, free = true) == d
         @test sum([sizeof(get_val_from(w, :test)) for w in W]) == 0
     end
 
@@ -83,12 +83,20 @@
         unscatter(di)
 
         @test dmapreduce(:noname, x -> x, (a, b) -> a + b, []) == nothing
+
+        @test dmapreduce(Dinfo[], sum, +) == nothing
+
+        @test_throws DomainError dmapreduce(
+            [Dinfo(:test1, [1, 2, 3]), Dinfo(:test2, [1, 4, 3])],
+            sum,
+            +,
+        )
     end
 
     @testset "Internal utilities" begin
         @test DistributedData.tmp_symbol(:test) != :test
-        @test DistributedData.tmp_symbol(:test, prefix = "abc",
-                                     suffix = "def") == :abctestdef
+        @test DistributedData.tmp_symbol(:test, prefix = "abc", suffix = "def") ==
+              :abctestdef
         @test DistributedData.tmp_symbol(Dinfo(:test, W)) != :test
     end
 
