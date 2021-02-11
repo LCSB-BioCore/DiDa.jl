@@ -46,7 +46,7 @@ Get a value `val` from a remote `worker`; quoting of `val` works just as with
 `save_at`. Returns a future with the requested value.
 """
 function get_from(worker, val; mod=Main)
-    remotecall(() -> Base.eval(mod, :($val)), worker)
+    remotecall(() -> Base.eval(mod, val), worker)
 end
 
 """
@@ -319,6 +319,48 @@ function dmap(arr::Vector, fn, workers)
         for (i, pid) in enumerate(workers)
     ]
     return [fetch(f) for f in futures]
+end
+
+"""
+A work-alike of `Distributed.pmap` that takes a `val` as a function and
+evaluates it for each object in collection `c` on workers. The main difference
+from `pmap` is that the `val` can be an expression that uses worker-local data.
+"""
+function dpmap(c::Vector, val, workers)
+    n = length(c)
+    tasks_queue = RemoteChannel(()->Channel{Tuple{Int, Any}}(n), myid())
+    results = RemoteChannel(()->Channel{Tuple{Int, Any}}(n), myid())
+
+    worker_cycle = () -> begin
+        while true
+            id, task = take!(tasks_queue)
+            if id <= 0
+                break
+            end
+            r = Base.eval(Main, val(task))
+            put!(results, (id, r))
+        end
+        nothing
+    end
+
+    ws = [get_from(w, :($worker_cycle())) for w in workers]
+    for i in 1:n
+        put!(tasks_queue, (i,c[i]))
+    end
+    for i in 1:length(workers)
+        put!(tasks_queue, (0, nothing))
+    end
+
+    fetch.(ws)
+
+    res=Any[]
+    resize!(res, n)
+    for i in 1:n
+        id, subresult = take!(results)
+        res[id]=subresult
+    end
+
+    res
 end
 
 """
